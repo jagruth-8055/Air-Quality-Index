@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aero • Premium Air Quality</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    
+    <style>
+        :root {
+            /* Ultra-Premium Glassmorphism */
+            --glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-highlight: rgba(255, 255, 255, 0.3);
+            --glass-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            --text-main: #ffffff;
+            --text-muted: rgba(255, 255, 255, 0.65);
+            
+            /* Status Colors */
+            --color-good: #00e676;
+            --color-moderate: #ffea00;
+            --color-unhealthy: #ff1744;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        body {
+            color: var(--text-main);
+            min-height: 100vh;
+            overflow-x: hidden;
+            background-color: #050505;
+        }
+
+        /* Cinematic City Background */
+        #city-bg {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background-size: cover; background-position: center;
+            z-index: -3; transition: background-image 1.5s ease-in-out;
+            filter: brightness(0.4) contrast(1.2); 
+        }
+
+        /* AQI Color Tint Overlay */
+        #aqi-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -2; transition: background 1.5s ease; mix-blend-mode: multiply;
+        }
+
+        /* Three.js Canvas Container */
+        #canvas-container {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -1; pointer-events: none;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* --- Header --- */
+        .header { 
+            display: flex; justify-content: space-between; align-items: center; 
+            margin-bottom: 30px; animation: fadeInDown 0.8s ease;
+        }
+        .header-title h1 { font-size: 38px; font-weight: 700; letter-spacing: -1px; }
+        .header-title p { color: var(--text-muted); font-size: 14px; text-transform: uppercase; letter-spacing: 3px; }
+        
+        .controls { display: flex; gap: 16px; align-items: center; }
+        .live-indicator {
+            display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 13px; font-weight: 500;
+            background: rgba(0,0,0,0.4); padding: 8px 16px; border-radius: 20px; backdrop-filter: blur(10px);
+        }
+        .live-dot { width: 8px; height: 8px; background: #ff1744; border-radius: 50%; box-shadow: 0 0 10px #ff1744; animation: pulse 2s infinite; }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+        @keyframes fadeInDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+
+        select {
+            background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255,255,255,0.2);
+            color: white; padding: 10px 20px; border-radius: 12px; font-size: 15px;
+            backdrop-filter: blur(10px); cursor: pointer; outline: none; transition: all 0.3s;
+        }
+        select:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.5); }
+        select option { background: #111; color: white; }
+
+        /* --- Bento Box Dashboard Grid --- */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 24px;
+            padding-bottom: 40px;
+        }
+
+        /* --- Premium Glass Card --- */
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(30px) saturate(180%);
+            -webkit-backdrop-filter: blur(30px) saturate(180%);
+            border: 1px solid var(--glass-border);
+            border-top: 1px solid var(--glass-highlight); 
+            border-left: 1px solid rgba(255,255,255,0.15);
+            border-radius: 30px;
+            padding: 28px;
+            box-shadow: var(--glass-shadow);
+            display: flex; flex-direction: column;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
+            animation: fadeInUp 0.8s ease backwards;
+        }
+        .glass-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Animation delays */
+        .card-location { animation-delay: 0.1s; }
+        .card-aqi { animation-delay: 0.2s; }
+        .card-chart-disease { animation-delay: 0.3s; }
+        .card-weather { animation-delay: 0.4s; }
+        .card-pollutants { animation-delay: 0.5s; }
+        .card-chart-trend { animation-delay: 0.6s; }
+        .card-forecast { animation-delay: 0.7s; } /* New Forecast Card */
+
+        .card-title {
+            font-size: 13px; font-weight: 600; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px;
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        /* Specific Grid Placements */
+        .card-location { grid-column: span 3; cursor: pointer; position: relative; overflow: hidden; }
+        .card-aqi { grid-column: span 3; text-align: center; justify-content: center; }
+        .card-chart-disease { grid-column: span 6; } 
+        .card-weather { grid-column: span 5; }
+        .card-pollutants { grid-column: span 7; }
+        .card-chart-trend { grid-column: span 12; }
+        .card-forecast { grid-column: span 12; overflow: hidden; } /* New Forecast Card */
+
+        /* Current Location Special Styling */
+        .card-location::before {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+            opacity: 0; transition: opacity 0.3s; pointer-events: none;
+        }
+        .card-location:hover::before { opacity: 1; }
+        .loc-badge { background: rgba(0, 230, 118, 0.2); color: #00e676; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; border: 1px solid #00e676; display: inline-block; margin-bottom: 12px; }
+
+        /* AQI Content */
+        .aqi-number { font-size: 96px; font-weight: 700; line-height: 1; margin-bottom: 10px; text-shadow: 0 0 40px currentColor; }
+        .aqi-category { 
+            display: inline-block; padding: 6px 20px; border-radius: 30px; 
+            font-weight: 600; font-size: 15px; margin-bottom: 16px; 
+            border: 1px solid currentColor; background: rgba(0,0,0,0.3); backdrop-filter: blur(5px);
+        }
+        .aqi-desc { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+        /* Weather Grid Inner */
+        .weather-inner-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; height: 100%; }
+        .weather-item {
+            background: rgba(0,0,0,0.3); border-radius: 20px; padding: 16px;
+            display: flex; align-items: center; justify-content: space-between;
+            border: 1px solid rgba(255,255,255,0.05); transition: background 0.3s;
+        }
+        .weather-item:hover { background: rgba(255,255,255,0.05); }
+        .w-left { display: flex; align-items: center; gap: 12px; }
+        .w-icon { font-size: 28px; background: rgba(255,255,255,0.1); width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 14px; }
+        .w-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .w-val { font-size: 20px; font-weight: 600; text-align: right;}
+
+        /* Pollutants Layout */
+        .pollutants-wrapper { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; height: 100%; align-items: stretch;}
+        .pollutant-box {
+            background: rgba(0,0,0,0.25); padding: 20px; border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.08); position: relative; display: flex; flex-direction: column; justify-content: space-between;
+        }
+        .p-head { display: flex; justify-content: space-between; margin-bottom: 16px; font-weight: 600; font-size: 16px; color: var(--text-muted);}
+        .p-val { font-size: 34px; font-weight: 700; text-shadow: 0 0 15px currentColor; line-height: 1;}
+        .p-unit { font-size: 13px; color: var(--text-muted); margin-left: 4px; }
+        .progress-track { height: 6px; background: rgba(255,255,255,0.1); border-radius: 6px; margin-top: 20px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); }
+        .progress-fill { height: 100%; border-radius: 6px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 12px currentColor; }
+        .alert-badge { 
+            background: var(--color-unhealthy); color: white; padding: 2px 8px; 
+            border-radius: 6px; font-size: 10px; display: none; text-transform: uppercase; letter-spacing: 1px;
+            box-shadow: 0 0 10px var(--color-unhealthy);
+        }
+        .pollutant-box.has-alert .alert-badge { display: block; }
+
+        /* Segmented Controls (Disease Tabs) */
+        .disease-tabs { 
+            display: flex; background: rgba(0,0,0,0.4); border-radius: 30px; padding: 5px; margin-bottom: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .disease-btn { 
+            flex: 1; background: transparent; border: none; color: var(--text-muted); 
+            padding: 8px 16px; border-radius: 25px; cursor: pointer; transition: all 0.3s; 
+            font-size: 13px; font-weight: 500; text-align: center;
+        }
+        .disease-btn.active { 
+            background: white; color: black; box-shadow: 0 4px 15px rgba(255,255,255,0.4); font-weight: 600;
+        }
+        .disease-btn:hover:not(.active) { color: white; }
+        .disease-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; line-height: 1.5; min-height: 40px;}
+
+        /* Charts */
+        .chart-container { width: 100%; height: 220px; flex-grow: 1; }
+
+        /* --- NEW: Toast Notification System --- */
+        .toast-container {
+            position: fixed; top: 24px; right: 24px; z-index: 9999;
+            display: flex; flex-direction: column; gap: 12px; pointer-events: none;
+        }
+        .toast {
+            background: rgba(15, 20, 30, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 16px;
+            padding: 16px 20px; color: white; min-width: 300px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+            transform: translateX(120%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.4s ease;
+            display: flex; gap: 16px; align-items: flex-start; pointer-events: auto; opacity: 0;
+        }
+        .toast.show { transform: translateX(0); opacity: 1; }
+        .toast-icon { font-size: 24px; line-height: 1; }
+        .toast-content { flex: 1; }
+        .toast-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+        .toast-msg { font-size: 13px; color: var(--text-muted); line-height: 1.4; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+        /* --- NEW: Forecast List Styles --- */
+        .forecast-list {
+            display: flex; gap: 16px; overflow-x: auto; padding-bottom: 8px;
+            scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.2) transparent;
+        }
+        .forecast-list::-webkit-scrollbar { height: 6px; }
+        .forecast-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+        .forecast-item {
+            background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 20px; padding: 20px; min-width: 140px;
+            display: flex; flex-direction: column; align-items: center; gap: 10px;
+            transition: background 0.3s; flex-shrink: 0;
+        }
+        .forecast-item:hover { background: rgba(255,255,255,0.1); }
+        .f-time { font-size: 12px; color: var(--text-muted); text-transform: uppercase; font-weight: 500; letter-spacing: 1px;}
+        .f-aqi { font-size: 28px; font-weight: 700; text-shadow: 0 0 15px currentColor; line-height: 1;}
+        .f-status { font-size: 11px; padding: 4px 10px; border-radius: 12px; background: rgba(255,255,255,0.1); text-transform: uppercase; letter-spacing: 1px;}
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .card-location, .card-aqi { grid-column: span 6; }
+            .card-chart-disease { grid-column: span 12; }
+            .card-weather, .card-pollutants { grid-column: span 12; }
+            .weather-inner-grid { grid-template-columns: repeat(4, 1fr); }
+        }
+        @media (max-width: 768px) {
+            .header { flex-direction: column; align-items: flex-start; gap: 16px; }
+            .controls { width: 100%; justify-content: space-between; }
+            .pollutants-wrapper { grid-template-columns: repeat(2, 1fr); }
+            .weather-inner-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <div id="city-bg"></div>
+    <div id="aqi-overlay"></div>
+    <div id="canvas-container"></div>
+
+    <div class="container">
+        <header class="header">
+            <div class="header-title">
+                <h1>Aero</h1>
+                <p>Global Intelligence</p>
+            </div>
+            <div class="controls">
+                <div class="live-indicator">
+                    <div class="live-dot"></div> <span id="last-updated-time">--:--:--</span>
+                </div>
+                <select id="location-select">
+                    <option value="newyork">New York, USA</option>
+                    <option value="paris">Paris, France</option>
+                    <option value="london">London, UK</option>
+                    <option value="tokyo">Tokyo, Japan</option>
+                    <option value="dubai">Dubai, UAE</option>
+                    <option value="delhi">Delhi, India</option>
+                    <option value="bengaluru">Bengaluru, India</option>
+                </select>
+            </div>
+        </header>
+
+        <div class="dashboard-grid">
+            
+            <div class="glass-card card-location" onclick="loadUserLocation()">
+                <div class="card-title">📍 Your Location</div>
+                <div class="loc-badge">Auto-Detected</div>
+                <div style="font-size: 26px; font-weight: 600; margin-bottom: 4px;">Bengaluru</div>
+                <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">Karnataka, India</div>
+                <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px;">
+                    <span style="font-size: 13px; color: var(--text-muted);">Local AQI</span>
+                    <span style="font-size: 20px; font-weight: 600; color: #00e676;">85 • Moderate</span>
+                </div>
+                <button style="margin-top: 16px; width: 100%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 10px; border-radius: 12px; cursor: pointer; font-family: 'Poppins'; transition: 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">View Local Data</button>
+            </div>
+
+            <div class="glass-card card-aqi">
+                <div class="card-title">⚡ Air Quality Index</div>
+                <div id="display-city" style="font-size: 18px; font-weight: 500; margin-bottom: 15px; color: var(--text-muted);">Loading...</div>
+                <div class="aqi-number" id="aqi-value">--</div>
+                <div class="aqi-category" id="aqi-category">--</div>
+                <div class="aqi-desc" id="aqi-desc">Loading data...</div>
+            </div>
+
+            <div class="glass-card card-chart-disease">
+                <div class="card-title">🫁 7-Day Health Impact Risk</div>
+                <div class="disease-tabs">
+                    <button class="disease-btn active" id="btn-asthma" onclick="updateDiseaseData('asthma', true)">Asthma</button>
+                    <button class="disease-btn" id="btn-bronchitis" onclick="updateDiseaseData('bronchitis', true)">Bronchitis</button>
+                    <button class="disease-btn" id="btn-copd" onclick="updateDiseaseData('copd', true)">COPD</button>
+                    <button class="disease-btn" id="btn-heart" onclick="updateDiseaseData('heart', true)">Heart</button>
+                </div>
+                <div class="disease-desc" id="disease-desc">Loading analysis...</div>
+                <div class="chart-container"><canvas id="diseaseChart"></canvas></div>
+            </div>
+
+            <div class="glass-card card-weather">
+                <div class="card-title">🌤️ Atmospherics</div>
+                <div class="weather-inner-grid">
+                    <div class="weather-item">
+                        <div class="w-left"><div class="w-icon">🌡️</div><div class="w-label">Temp</div></div>
+                        <div class="w-val" id="weather-temp">--°C</div>
+                    </div>
+                    <div class="weather-item">
+                        <div class="w-left"><div class="w-icon">💧</div><div class="w-label">Humid</div></div>
+                        <div class="w-val" id="weather-humidity">--%</div>
+                    </div>
+                    <div class="weather-item">
+                        <div class="w-left"><div class="w-icon" id="weather-icon-cond">☁️</div><div class="w-label">Status</div></div>
+                        <div class="w-val" id="weather-condition" style="font-size: 16px;">--</div>
+                    </div>
+                    <div class="weather-item" style="border-color: rgba(255,255,255,0.2);">
+                        <div class="w-left"><div class="w-icon" id="wind-arrow" style="transition: transform 0.5s;">↑</div><div class="w-label" id="wind-label">Wind</div></div>
+                        <div class="w-val" id="weather-wind">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card card-pollutants">
+                <div class="card-title">🔬 Key Pollutants</div>
+                <div class="pollutants-wrapper">
+                    <div class="pollutant-box" id="card-pm25">
+                        <div class="p-head"><span>PM2.5</span><span class="alert-badge">Warning</span></div>
+                        <div>
+                            <div style="display: flex; align-items: baseline;"><span class="p-val" id="val-pm25">--</span><span class="p-unit">µg</span></div>
+                            <div class="progress-track"><div class="progress-fill" id="bar-pm25" style="width: 0%;"></div></div>
+                        </div>
+                    </div>
+                    <div class="pollutant-box" id="card-pm10">
+                        <div class="p-head"><span>PM10</span><span class="alert-badge">Warning</span></div>
+                        <div>
+                            <div style="display: flex; align-items: baseline;"><span class="p-val" id="val-pm10">--</span><span class="p-unit">µg</span></div>
+                            <div class="progress-track"><div class="progress-fill" id="bar-pm10" style="width: 0%;"></div></div>
+                        </div>
+                    </div>
+                    <div class="pollutant-box" id="card-no2">
+                        <div class="p-head"><span>NO₂</span><span class="alert-badge">Warning</span></div>
+                        <div>
+                            <div style="display: flex; align-items: baseline;"><span class="p-val" id="val-no2">--</span><span class="p-unit">ppb</span></div>
+                            <div class="progress-track"><div class="progress-fill" id="bar-no2" style="width: 0%;"></div></div>
+                        </div>
+                    </div>
+                    <div class="pollutant-box" id="card-co">
+                        <div class="p-head"><span>CO</span><span class="alert-badge">Warning</span></div>
+                        <div>
+                            <div style="display: flex; align-items: baseline;"><span class="p-val" id="val-co">--</span><span class="p-unit">ppm</span></div>
+                            <div class="progress-track"><div class="progress-fill" id="bar-co" style="width: 0%;"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card card-chart-trend">
+                <div class="card-title">📈 24-Hour Historical Trend</div>
+                <div class="chart-container" style="height: 280px;"><canvas id="trendChart"></canvas></div>
+            </div>
+
+            <div class="glass-card card-forecast">
+                <div class="card-title">🔮 Next 24 Hours Forecast</div>
+                <div class="forecast-list" id="forecast-container">
+                    </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Global State
+        let currentCityId = 'newyork';
+
+        // --- 1. Core Data ---
+        // Added 'forecast' array to each city for the new 24h predictive UI
+        const mockData = {
+            bengaluru: { 
+                name: "Bengaluru", country: "India", coords: "12.9716°N, 77.5946°E", 
+                bgImage: "url('https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=1920&q=80')",
+                aqi: 85, aqiCategory: "Moderate", 
+                weather: { temp: 28, humidity: 45, wind: 15, windDir: 180, condition: "Partly Cloudy", icon: "⛅" }, 
+                pollutants: { pm25: { value: 25.4, limit: 35.4 }, pm10: { value: 65.2, limit: 154 }, no2: { value: 45.1, limit: 100 }, co: { value: 2.1, limit: 9.4 } }, 
+                chartData: { aqi: [60, 65, 70, 75, 80, 85, 85, 80, 75, 70, 65, 60] },
+                forecast: [{time:"+4h", aqi:82}, {time:"+8h", aqi:78}, {time:"+12h", aqi:65}, {time:"+16h", aqi:55}, {time:"+20h", aqi:58}, {time:"+24h", aqi:65}]
+            },
+            delhi: { 
+                name: "Delhi", country: "India", coords: "28.7041°N, 77.1025°E", 
+                bgImage: "url('https://images.unsplash.com/photo-1587474260580-2bdcc4ef0062?auto=format&fit=crop&w=1920&q=80')", 
+                aqi: 170, aqiCategory: "Unhealthy", 
+                weather: { temp: 21, humidity: 48, wind: 12, windDir: 45, condition: "Overcast", icon: "☁️" }, 
+                pollutants: { pm25: { value: 92.1, limit: 35.4 }, pm10: { value: 76.5, limit: 154 }, no2: { value: 121.5, limit: 100 }, co: { value: 10.1, limit: 9.4 } }, 
+                chartData: { aqi: [120, 130, 145, 150, 160, 165, 170, 168, 160, 155, 140, 130] },
+                forecast: [{time:"+4h", aqi:165}, {time:"+8h", aqi:150}, {time:"+12h", aqi:140}, {time:"+16h", aqi:135}, {time:"+20h", aqi:145}, {time:"+24h", aqi:155}]
+            },
+            newyork: { 
+                name: "New York", country: "USA", coords: "40.7128°N, -74.0060°E", 
+                bgImage: "url('https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&w=1920&q=80')", 
+                aqi: 42, aqiCategory: "Good", 
+                weather: { temp: 15, humidity: 60, wind: 25, windDir: 135, condition: "Clear", icon: "☀️" }, 
+                pollutants: { pm25: { value: 12.5, limit: 35.4 }, pm10: { value: 20.1, limit: 154 }, no2: { value: 30.5, limit: 100 }, co: { value: 2.1, limit: 9.4 } }, 
+                chartData: { aqi: [40, 42, 45, 43, 41, 40, 42, 44, 46, 45, 43, 41] },
+                forecast: [{time:"+4h", aqi:40}, {time:"+8h", aqi:38}, {time:"+12h", aqi:35}, {time:"+16h", aqi:36}, {time:"+20h", aqi:40}, {time:"+24h", aqi:42}]
+            },
+            paris: { 
+                name: "Paris", country: "France", coords: "48.8566°N, 2.3522°E", 
+                bgImage: "url('https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1920&q=80')", 
+                aqi: 65, aqiCategory: "Moderate", 
+                weather: { temp: 13, humidity: 65, wind: 8, windDir: 270, condition: "Cloudy", icon: "☁️" }, 
+                pollutants: { pm25: { value: 19.0, limit: 35.4 }, pm10: { value: 14.7, limit: 154 }, no2: { value: 11.5, limit: 100 }, co: { value: 1.3, limit: 9.4 } }, 
+                chartData: { aqi: [55, 60, 65, 68, 65, 62, 60, 58, 55, 52, 50, 48] },
+                forecast: [{time:"+4h", aqi:60}, {time:"+8h", aqi:55}, {time:"+12h", aqi:50}, {time:"+16h", aqi:48}, {time:"+20h", aqi:52}, {time:"+24h", aqi:58}]
+            },
+            london: { 
+                name: "London", country: "UK", coords: "51.5074°N, -0.1278°E", 
+                bgImage: "url('https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=1920&q=80')", 
+                aqi: 99, aqiCategory: "Moderate", 
+                weather: { temp: 11, humidity: 57, wind: 18, windDir: 200, condition: "Rainy", icon: "🌧️" }, 
+                pollutants: { pm25: { value: 34.8, limit: 35.4 }, pm10: { value: 20.4, limit: 154 }, no2: { value: 32.5, limit: 100 }, co: { value: 2.3, limit: 9.4 } }, 
+                chartData: { aqi: [85, 90, 95, 98, 99, 95, 90, 85, 80, 75, 70, 65] },
+                forecast: [{time:"+4h", aqi:85}, {time:"+8h", aqi:75}, {time:"+12h", aqi:60}, {time:"+16h", aqi:55}, {time:"+20h", aqi:65}, {time:"+24h", aqi:80}]
+            },
+            tokyo: { 
+                name: "Tokyo", country: "Japan", coords: "35.6762°N, 139.6503°E", 
+                bgImage: "url('https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=1920&q=80')", 
+                aqi: 35, aqiCategory: "Good", 
+                weather: { temp: 22, humidity: 50, wind: 35, windDir: 90, condition: "Clear", icon: "☀️" }, 
+                pollutants: { pm25: { value: 8.4, limit: 35.4 }, pm10: { value: 15.2, limit: 154 }, no2: { value: 20.1, limit: 100 }, co: { value: 1.1, limit: 9.4 } }, 
+                chartData: { aqi: [30, 32, 35, 33, 31, 30, 32, 34, 35, 33, 31, 30] },
+                forecast: [{time:"+4h", aqi:32}, {time:"+8h", aqi:30}, {time:"+12h", aqi:28}, {time:"+16h", aqi:25}, {time:"+20h", aqi:30}, {time:"+24h", aqi:35}]
+            },
+            dubai: { 
+                name: "Dubai", country: "UAE", coords: "25.2048°N, 55.2708°E", 
+                bgImage: "url('https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=1920&q=80')", 
+                aqi: 145, aqiCategory: "Unhealthy for Sensitive Groups", 
+                weather: { temp: 35, humidity: 30, wind: 5, windDir: 10, condition: "Haze", icon: "🌫️" }, 
+                pollutants: { pm25: { value: 55.2, limit: 35.4 }, pm10: { value: 125.5, limit: 154 }, no2: { value: 65.0, limit: 100 }, co: { value: 5.5, limit: 9.4 } }, 
+                chartData: { aqi: [120, 125, 130, 135, 140, 145, 145, 140, 135, 130, 125, 120] },
+                forecast: [{time:"+4h", aqi:140}, {time:"+8h", aqi:135}, {time:"+12h", aqi:120}, {time:"+16h", aqi:115}, {time:"+20h", aqi:125}, {time:"+24h", aqi:130}]
+            }
+        };
+
+        const diseaseDataMap = {
+            asthma: { desc: "High fine-particulate matter easily triggers bronchospasms. Risk calculated via PM2.5 & humidity fluctuations.", color: "#ff4081", data: [45, 60, 55, 80, 75, 50, 65] },
+            bronchitis: { desc: "Irritants inflame bronchial tubes increasing mucus. Risk tracks PM10 (dust) and weather fronts.", color: "#00e5ff", data: [30, 40, 35, 55, 60, 45, 50] },
+            copd: { desc: "Chronic Obstructive Pulmonary Disease risk correlates strongly with overall AQI and prolonged smog.", color: "#ffd740", data: [50, 65, 70, 85, 90, 80, 75] },
+            heart: { desc: "High pollutants restrict oxygen flow, stressing the heart. Risk tracks CO and NO2 levels.", color: "#ff5252", data: [20, 25, 30, 40, 55, 45, 35] }
+        };
+
+        // --- NEW: Custom Toast Notification System ---
+        function showToast(title, message, color) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.style.borderLeft = `4px solid ${color}`;
+            
+            toast.innerHTML = `
+                <div class="toast-icon" style="color: ${color};">ℹ️</div>
+                <div class="toast-content">
+                    <div class="toast-title"><span class="status-dot" style="background: ${color};"></span> ${title}</div>
+                    <div class="toast-msg">${message}</div>
+                </div>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Animate in
+            setTimeout(() => toast.classList.add('show'), 10);
+            
+            // Remove after 4 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 400); // Wait for transition
+            }, 4000);
+        }
+
+        // --- 2. Three.js 3D Wind Particle System ---
+        let scene, camera, renderer, particleSystem;
+        let windVelocityX = 0, windVelocityY = 0;
+
+        function init3D() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1000);
+            camera.position.z = 400;
+
+            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            const particleCount = 2500;
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+
+            for (let i = 0; i < particleCount * 3; i++) {
+                positions[i] = (Math.random() - 0.5) * 1500; 
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const material = new THREE.PointsMaterial({
+                color: 0xffffff, size: 2.0, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending
+            });
+
+            particleSystem = new THREE.Points(geometry, material);
+            scene.add(particleSystem);
+
+            animate3D();
+        }
+
+        function updateWind3D(speed, angleDegrees) {
+            const radians = (angleDegrees - 90) * (Math.PI / 180);
+            const speedScale = speed * 0.2; 
+            windVelocityX = Math.cos(radians) * speedScale;
+            windVelocityY = -Math.sin(radians) * speedScale; 
+            document.getElementById('wind-arrow').style.transform = `rotate(${angleDegrees}deg)`;
+            document.getElementById('wind-label').textContent = `Wind (${angleDegrees}°)`;
+        }
+
+        function animate3D() {
+            requestAnimationFrame(animate3D);
+            const positions = particleSystem.geometry.attributes.position.array;
+            
+            for (let i = 0; i < positions.length; i += 3) {
+                positions[i] += windVelocityX;     
+                positions[i + 1] += windVelocityY; 
+                positions[i + 2] += Math.sin(Date.now() * 0.001 + i) * 0.5;
+
+                if (positions[i] > 750) positions[i] = -750;
+                if (positions[i] < -750) positions[i] = 750;
+                if (positions[i + 1] > 750) positions[i + 1] = -750;
+                if (positions[i + 1] < -750) positions[i + 1] = 750;
+            }
+
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- 3. Main UI Update Logic ---
+        function getAQIDetails(aqi) {
+            if (aqi <= 50) return { color: 'var(--color-good)', bg: 'rgba(0, 230, 118, 0.1)', desc: "Ideal air quality. Enjoy outdoor activities." };
+            if (aqi <= 100) return { color: 'var(--color-moderate)', bg: 'rgba(255, 234, 0, 0.1)', desc: "Acceptable quality. Sensitive groups take care." };
+            if (aqi <= 150) return { color: '#ff9100', bg: 'rgba(255, 145, 0, 0.1)', desc: "Unhealthy for sensitive groups. Limit exertion." };
+            return { color: 'var(--color-unhealthy)', bg: 'rgba(255, 23, 68, 0.1)', desc: "Health alert: Risk increased for everyone." };
+        }
+
+        function updateUI(cityKey) {
+            currentCityId = cityKey;
+            const data = mockData[cityKey];
+            if (!data) return;
+
+            // Background & Theme
+            document.getElementById('city-bg').style.backgroundImage = data.bgImage;
+            const aqiDetails = getAQIDetails(data.aqi);
+            
+            let overlayColor = 'rgba(0,0,0,0.4)';
+            if (data.aqi > 150) overlayColor = 'rgba(80, 0, 10, 0.5)'; 
+            else if (data.aqi > 100) overlayColor = 'rgba(80, 40, 0, 0.5)'; 
+            else if (data.aqi <= 50) overlayColor = 'rgba(0, 30, 15, 0.4)'; 
+            document.getElementById('aqi-overlay').style.background = overlayColor;
+
+            // Header Texts
+            document.getElementById('display-city').textContent = `${data.name}, ${data.country}`;
+            document.getElementById('location-select').value = cityKey;
+
+            // Main AQI Card
+            const aqiNumEl = document.getElementById('aqi-value');
+            const aqiCatEl = document.getElementById('aqi-category');
+            aqiNumEl.textContent = data.aqi;
+            aqiNumEl.style.color = aqiDetails.color;
+            aqiCatEl.textContent = data.aqiCategory;
+            aqiCatEl.style.color = aqiDetails.color;
+            aqiCatEl.style.borderColor = aqiDetails.color;
+            aqiCatEl.style.background = aqiDetails.bg;
+            document.getElementById('aqi-desc').textContent = aqiDetails.desc;
+
+            // Weather Data
+            document.getElementById('weather-temp').textContent = `${data.weather.temp}°C`;
+            document.getElementById('weather-humidity').textContent = `${data.weather.humidity}%`;
+            document.getElementById('weather-icon-cond').textContent = data.weather.icon;
+            document.getElementById('weather-condition').textContent = data.weather.condition;
+            document.getElementById('weather-wind').textContent = `${data.weather.wind}`;
+            updateWind3D(data.weather.wind, data.weather.windDir);
+
+            // Pollutants Data
+            ['pm25', 'pm10', 'no2', 'co'].forEach(key => {
+                const pData = data.pollutants[key];
+                if(pData) {
+                    const barEl = document.getElementById(`bar-${key}`);
+                    const cardEl = document.getElementById(`card-${key}`);
+                    document.getElementById(`val-${key}`).textContent = pData.value;
+                    
+                    let pct = Math.min((pData.value / pData.limit) * 100, 100);
+                    let color = pData.value > pData.limit ? 'var(--color-unhealthy)' : (pct > 50 ? 'var(--color-moderate)' : 'var(--color-good)');
+                    
+                    document.getElementById(`val-${key}`).style.color = color;
+                    barEl.style.width = `${pct}%`;
+                    barEl.style.background = color;
+                    barEl.style.color = color;
+                    
+                    if(pData.value > pData.limit) cardEl.classList.add('has-alert');
+                    else cardEl.classList.remove('has-alert');
+                }
+            });
+
+            updateChart(data.chartData);
+            renderForecast(data.forecast);
+        }
+
+        function loadUserLocation() {
+            updateUI('bengaluru');
+            showToast("Location Updated", "Dashboard synced to Bengaluru local data.", "var(--color-good)");
+        }
+
+        // --- NEW: Render Forecast ---
+        function renderForecast(forecastData) {
+            const container = document.getElementById('forecast-container');
+            container.innerHTML = ''; // Clear old
+
+            forecastData.forEach(item => {
+                // Determine styling based on AQI level
+                let color = "var(--color-good)";
+                let status = "Good";
+                if(item.aqi > 150) { color = "var(--color-unhealthy)"; status = "Bad"; }
+                else if(item.aqi > 50) { color = "var(--color-moderate)"; status = "Average"; }
+
+                const div = document.createElement('div');
+                div.className = 'forecast-item';
+                div.innerHTML = `
+                    <div class="f-time">${item.time}</div>
+                    <div class="f-aqi" style="color: ${color};">${item.aqi}</div>
+                    <div class="f-status" style="color: ${color};">${status}</div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // --- 4. Chart.js Setup ---
+        let trendChart, diseaseChart;
+
+        function initCharts() {
+            Chart.defaults.color = 'rgba(255, 255, 255, 0.6)';
+            Chart.defaults.font.family = 'Poppins';
+            
+            const ctx1 = document.getElementById('trendChart').getContext('2d');
+            trendChart = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: ['12am', '2am', '4am', '6am', '8am', '10am', '12pm', '2pm', '4pm', '6pm', '8pm', '10pm'],
+                    datasets: [{ 
+                        label: 'AQI Level', data: [], 
+                        borderColor: '#ffffff', backgroundColor: 'rgba(255, 255, 255, 0.15)', 
+                        borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0, pointHitRadius: 10
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { 
+                        y: { grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false }, beginAtZero: true }, 
+                        x: { grid: { display: false, drawBorder: false } } 
+                    }
+                }
+            });
+
+            const ctx2 = document.getElementById('diseaseChart').getContext('2d');
+            const labels7Days = [];
+            for (let i = 6; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                labels7Days.push(d.toLocaleDateString('en-US', { weekday: 'short' }));
+            }
+
+            diseaseChart = new Chart(ctx2, {
+                type: 'bar', 
+                data: {
+                    labels: labels7Days,
+                    datasets: [{ label: 'Risk Level (%)', data: [], backgroundColor: '#ff4081', borderRadius: 8 }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { max: 100, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false } },
+                        x: { grid: { display: false, drawBorder: false } }
+                    }
+                }
+            });
+        }
+
+        function updateChart(chartData) {
+            if (trendChart) {
+                trendChart.data.datasets[0].data = chartData.aqi;
+                trendChart.update();
+            }
+        }
+
+        function updateDiseaseData(diseaseType, triggerToast = false) {
+            // Update UI buttons
+            document.querySelectorAll('.disease-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${diseaseType}`).classList.add('active');
+
+            // Update Chart Data
+            const dData = diseaseDataMap[diseaseType];
+            document.getElementById('disease-desc').textContent = dData.desc;
+
+            if (diseaseChart) {
+                diseaseChart.data.datasets[0].data = dData.data;
+                diseaseChart.data.datasets[0].backgroundColor = dData.color;
+                diseaseChart.update();
+            }
+
+            // --- NEW: Trigger Toast based on Current AQI ---
+            if(triggerToast) {
+                const cityData = mockData[currentCityId];
+                if(cityData) {
+                    let status = "Good";
+                    let color = "var(--color-good)";
+                    let advice = "You're safe to go outside.";
+
+                    if(cityData.aqi > 150) { 
+                        status = "Bad"; 
+                        color = "var(--color-unhealthy)"; 
+                        advice = "Stay indoors and keep medications ready.";
+                    } else if(cityData.aqi > 50) { 
+                        status = "Average"; 
+                        color = "var(--color-moderate)"; 
+                        advice = "Limit prolonged outdoor exertion.";
+                    }
+
+                    const diseaseName = diseaseType.charAt(0).toUpperCase() + diseaseType.slice(1);
+                    showToast(
+                        `${diseaseName} Alert`, 
+                        `Current AQI is <b>${status} (${cityData.aqi})</b> for ${cityData.name}. ${advice}`, 
+                        color
+                    );
+                }
+            }
+        }
+
+        document.getElementById('location-select').addEventListener('change', e => updateUI(e.target.value));
+
+        window.onload = () => {
+            const timeEl = document.getElementById('last-updated-time');
+            setInterval(() => {
+                timeEl.textContent = new Date().toLocaleTimeString('en-US', {hour12: false});
+            }, 1000);
+            timeEl.textContent = new Date().toLocaleTimeString('en-US', {hour12: false});
+            
+            init3D();
+            initCharts();
+            
+            // Initial Load
+            updateUI('newyork');
+            updateDiseaseData('asthma', false); // false prevents toast spam on load
+        };
+    </script>
+</body>
+</html>
